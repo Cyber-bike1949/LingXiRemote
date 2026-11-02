@@ -1,0 +1,46 @@
+name: Remote build and tests
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  remote:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v5
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: cargo fmt --manifest-path agent/Cargo.toml --check
+      - run: cargo test --locked --manifest-path agent/Cargo.toml
+      - run: cargo build --locked --manifest-path agent/Cargo.toml
+      - run: pnpm test:e2e
+      - run: node scripts/setup.e2e.mjs
+      - name: Build package
+        shell: bash
+        run: |
+          export LINGXI_AGENT_BINARY="agent/target/debug/lingxi1949"
+          if [ "$RUNNER_OS" = Windows ]; then export LINGXI_AGENT_BINARY="${LINGXI_AGENT_BINARY}.exe"; fi
+          pnpm package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: remote-${{ runner.os }}
+          path: release-assets/lingxi-remote-*

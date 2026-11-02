@@ -1,0 +1,49 @@
+name: Remote release
+on:
+  push:
+    tags: ['5.*']
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v5
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: cargo test --locked --manifest-path agent/Cargo.toml
+      - run: cargo build --release --locked --manifest-path agent/Cargo.toml
+      - run: pnpm package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: remote-${{ runner.os }}
+          path: release-assets/lingxi-remote-*
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: remote-*
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: assets/*
+          draft: true
